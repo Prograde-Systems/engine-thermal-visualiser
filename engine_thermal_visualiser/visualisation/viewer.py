@@ -7,118 +7,132 @@ import os
 def compute_vertex_temperatures(vertices, tc_positions, tc_values, max_distance=60.0):
     vertex_temps = []
 
-    for idx, (vx, vy, vz) in enumerate(vertices):
-        distances = []
-        temps = []
+    for vx, vy, vz in vertices:
+        weights, temps = [], []
+
         for tc_name, (tx, ty, tz) in tc_positions.items():
             d = np.linalg.norm([vx - tx, vy - ty, vz - tz])
             if d < max_distance:
-                weight = 1 / (d + 1e-6)
-                distances.append(weight)
-                temps.append(tc_values[tc_name])
+                w = 1 / (d + 1e-6)
+                weights.append(w)
+                temps.append(tc_values.get(tc_name, 20.0))
 
-        if distances:
-            weighted_temp = np.average(temps, weights=distances)
-            vertex_temps.append(weighted_temp)
+        if weights:
+            vertex_temps.append(np.average(temps, weights=weights))
         else:
-            vertex_temps.append(20.0)  # or a neutral temperature, like the ambient value
-
+            vertex_temps.append(20.0)  # ambient fallback
 
     return vertex_temps
 
 
+def tessellate_solids(solids_info, angular_tolerance=1.0, linear_tolerance=1.0):
+    all_coords, all_faces = [], []
+    offset = 0
 
-
-def combine_solids_to_colored_plotly_mesh(solids_info, tc_positions=None, tc_values=None,
-                                          angular_tolerance=1.0, linear_tolerance=1.0):
-    """
-    Combine solids into a single Plotly mesh, interpolating only where TC coverage exists.
-    Faces with insufficient data are excluded.
-    """
-    all_x, all_y, all_z = [], [], []
-    all_i, all_j, all_k = [], [], []
-    all_intensity = []
-    vertex_map = {}  # map from original index to new index
-    vertex_offset = 0
-
-    for idx, solid_info in enumerate(solids_info):
+    for solid_info in solids_info:
         solid = solid_info["solid"]
-
         try:
             tess = solid.tessellate(angular_tolerance, linear_tolerance)
-            vertices, triangles = tess
+            vertices = [(v.x, v.y, v.z) for v in tess[0]]
+            triangles = tess[1]
         except Exception as e:
-            print(f"[WARN] Skipping solid_{idx} due to tessellation error: {e}")
+            print(f"[WARN] Skipping solid due to tessellation error: {e}")
             continue
 
         if not vertices or not triangles:
-            print(f"[WARN] Skipping solid_{idx}: empty tessellation.")
             continue
 
-        coords = [(v.x, v.y, v.z) for v in vertices]
+        face_indices = [
+            (tri[0] + offset, tri[1] + offset, tri[2] + offset)
+            for tri in triangles
+        ]
 
-        if tc_positions and tc_values:
-            intensities = compute_vertex_temperatures(coords, tc_positions, tc_values)
-        else:
-            intensities = [z for _, _, z in coords]
+        all_coords.extend(vertices)
+        all_faces.extend(face_indices)
+        offset += len(vertices)
 
-        local_index_map = {}
-        for local_idx, ((x, y, z), temp) in enumerate(zip(coords, intensities)):
-            if temp is not None:
-                new_idx = len(all_x)
-                local_index_map[local_idx] = new_idx
-                all_x.append(x)
-                all_y.append(y)
-                all_z.append(z)
-                all_intensity.append(temp)
+    return all_coords, all_faces
 
-        for tri in triangles:
-            try:
-                new_i = local_index_map[tri[0]]
-                new_j = local_index_map[tri[1]]
-                new_k = local_index_map[tri[2]]
-                all_i.append(new_i)
-                all_j.append(new_j)
-                all_k.append(new_k)
-            except KeyError:
-                # At least one vertex missing data — skip this face
-                continue
 
-    if not all_x or not all_i:
-        raise ValueError("No mesh data with valid TC coverage to render.")
+def make_mesh_frame(vertices, faces, intensities):
+    x, y, z = zip(*vertices)
+    i, j, k = zip(*faces)
 
     return go.Mesh3d(
-        x=all_x, y=all_y, z=all_z,
-        i=all_i, j=all_j, k=all_k,
-        intensity=all_intensity,
+        x=x, y=y, z=z,
+        i=i, j=j, k=k,
+        intensity=intensities,
         colorscale='Hot',
         opacity=1.0,
-        name='Thermal Map',
-        showscale=True,
         flatshading=True,
+        showscale=True
     )
 
 
-
-def render_solids_plotly(solids_info, tc_positions=None, tc_values=None, output_file="output/plot.html"):
-    """
-    Render all solids with mapped thermal data using Plotly.
-    """
-    print(f"[INFO] Rendering {len(solids_info)} solids...")
+def render_solids_with_time_slider(solids_info, tc_positions, time_series_data, output_file="output/thermal_animation.html"):
+    print(f"[INFO] Rendering {len(solids_info)} solids with time slider...")
 
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
-    mesh = combine_solids_to_colored_plotly_mesh(solids_info, tc_positions, tc_values)
+    all_coords, all_faces = tessellate_solids(solids_info)
+    if not all_coords or not all_faces:
+        raise ValueError("No mesh data available for rendering.")
 
-    fig = go.Figure(data=[mesh])
-    fig.update_layout(
-        scene=dict(
-            xaxis_title='X',
-            yaxis_title='Y',
-            zaxis_title='Z'
+    times = sorted(time_series_data.keys())
+    frames = []
+    slider_steps = []
+
+    # Build frames
+    for t in times:
+        tc_values = time_series_data[t]
+        intensities = compute_vertex_temperatures(all_coords, tc_positions, tc_values)
+        mesh = make_mesh_frame(all_coords, all_faces, intensities)
+
+        frames.append(go.Frame(data=[mesh], name=f"{t:.2f}s"))
+        slider_steps.append({
+            "args": [[f"{t:.2f}s"], {"frame": {"duration": 0, "redraw": True}, "mode": "immediate"}],
+            "label": f"{t:.2f}s",
+            "method": "animate"
+        })
+
+    # Base (initial) mesh
+    base_intensities = compute_vertex_temperatures(all_coords, tc_positions, time_series_data[times[0]])
+    base_mesh = make_mesh_frame(all_coords, all_faces, base_intensities)
+
+    # Full interactive figure
+    fig = go.Figure(
+        data=[base_mesh],
+        layout=go.Layout(
+            title="Engine Thermal Visualisation (Time Slider)",
+            scene=dict(
+                xaxis_title="X", yaxis_title="Y", zaxis_title="Z"
+            ),
+            updatemenus=[{
+                "type": "buttons",
+                "buttons": [
+                    {
+                        "label": "Play",
+                        "method": "animate",
+                        "args": [None, {"frame": {"duration": 500, "redraw": True}, "fromcurrent": True}]
+                    }
+                ],
+                "direction": "left",
+                "pad": {"r": 10, "t": 70},
+                "showactive": True,
+                "x": 0.1,
+                "xanchor": "right",
+                "y": 0,
+                "yanchor": "top"
+            }],
+            sliders=[{
+                "active": 0,
+                "pad": {"t": 50},
+                "currentvalue": {"prefix": "Time: "},
+                "steps": slider_steps
+            }]
         ),
-        title='Engine Thermal Visualisation',
-        margin=dict(l=0, r=0, t=40, b=0)
+        frames=frames
     )
+
     fig.write_html(output_file)
-    print(f"[INFO] Plot saved to {output_file}. Open it in your browser.")
+    print(f"[INFO] Animated thermal plot saved to {output_file}")

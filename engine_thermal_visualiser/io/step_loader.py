@@ -21,14 +21,6 @@ def load_step_file(filepath):
     tc_points = []
 
     for i, shape in enumerate(assembly.solids().vals()):
-        print(f"\n--- Shape {i} Attributes ---")
-        for attr in dir(shape):
-            if not attr.startswith("__"):  # skip internal dunder methods
-                try:
-                    value = getattr(shape, attr)
-                    print(f"{attr}: {value}")
-                except Exception as e:
-                    print(f"{attr}: <error reading attribute: {e}>")
         center = shape.Center()
         label = getattr(shape, "label", None)
         name = label.strip() if label else f"solid_{i}"

@@ -1,17 +1,28 @@
 from engine_thermal_visualiser.visualisation.viewer import render_solids_plotly
 from engine_thermal_visualiser.io.step_loader import load_step_file
+from engine_thermal_visualiser.io.config_loader import load_tc_config  # new
+import pandas as pd
 
-filepath = "data/example_model.step"
-print("Loading step file")
-solids, tc_points = load_step_file(filepath)
+# --- Filepaths ---
+step_path = "data/example_model.step"
+tc_config_path = "data/TC_positions.yaml"  # your config
+sensor_csv_path = "data/temperature_data.csv"
 
-print(type(solids))  # This is what you're currently printing
+# --- Load geometry ---
+print("Loading STEP file")
+solids, _ = load_step_file(step_path)
 
-print(f"Found {len(tc_points)} thermocouples:")
+# --- Load thermocouple locations ---
+print("Loading thermocouple positions from config...")
+tc_positions = load_tc_config(tc_config_path)
+print(f"Loaded {len(tc_positions)} thermocouple positions:")
+for name, coords in tc_positions.items():
+    print(f"  {name}: {coords}")
 
-for name, pos in tc_points.items():
-    print(f"  {name}: {pos}")
+# --- Load temperature sensor values ---
+df = pd.read_csv(sensor_csv_path)
+t0_data = df.iloc[0].to_dict()
+t0_data.pop("t", None)  # remove time column if present
 
-
-print("rendering solids")
-render_solids_plotly(solids)
+print(f"Visualising t = 0.0s with {len(t0_data)} sensor readings...")
+render_solids_plotly(solids, tc_positions=tc_positions, tc_values=t0_data)

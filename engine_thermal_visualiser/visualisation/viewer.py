@@ -58,11 +58,19 @@ def make_mesh_frame(vertices, faces, intensities):
     x, y, z = zip(*vertices)
     i, j, k = zip(*faces)
 
+    custom_flir_scale = [
+        [0.0, "black"],
+        [0.2, "purple"],
+        [0.4, "red"],
+        [0.6, "orange"],
+        [0.8, "yellow"],
+        [1.0, "white"]
+    ]
     return go.Mesh3d(
         x=x, y=y, z=z,
         i=i, j=j, k=k,
         intensity=intensities,
-        colorscale='Hot',
+        colorscale=custom_flir_scale,
         opacity=1.0,
         flatshading=True,
         showscale=True
@@ -84,6 +92,7 @@ def render_solids_with_time_slider(solids_info, tc_positions, time_series_data, 
 
     # Build frames
     for t in times:
+        print(f"[INFO] t = {t} / {max(times)}")
         tc_values = time_series_data[t]
         intensities = compute_vertex_temperatures(all_coords, tc_positions, tc_values)
         mesh = make_mesh_frame(all_coords, all_faces, intensities)

@@ -30,8 +30,6 @@ Thumbs.db
 *.bak
 
 # STEP and CAD output (optional – if generated)
-*.step
-*.stp
 *.iges
 *.f3d
 *.obj

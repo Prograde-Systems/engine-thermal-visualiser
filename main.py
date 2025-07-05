@@ -73,6 +73,25 @@ print("Interpolator ready.")
 # ----------------------------
 mesh_path = os.path.join(folder_path, "input/engine_model.obj")
 mesh = pv.read(mesh_path)
+
+sampling_factor = cfg.get("mesh_sampling", 1.0)
+
+if sampling_factor > 1.0:
+    # 🔼 Refine: subdivide mesh
+    subdivisions = int(np.floor(np.log2(sampling_factor)))
+    mesh = mesh.subdivide(subdivisions, 'loop')
+
+    print(f"Mesh refined with {subdivisions} subdivisions → {mesh.n_points} vertices")
+
+elif sampling_factor < 1.0:
+    # 🔽 Simplify: reduce number of faces
+    target_reduction = 1.0 - sampling_factor  # e.g., 0.5 means 50% fewer faces
+    mesh = mesh.decimate(target_reduction=target_reduction)
+    print(f"Mesh simplified by {int(target_reduction * 100)}% → {mesh.n_points} vertices")
+
+else:
+    print("Mesh sampling factor = 1.0 → using original resolution")
+
 mesh.scale([10, 10, 10], inplace=True)
 print(f"Mesh loaded: {mesh.n_points} vertices")
 
@@ -162,7 +181,7 @@ def render_single_frame(args):
     plotter.screenshot(img_path)
     plotter.close()
 
-    return f"✅ Frame {i+1} done"
+    return f"[INFO]Frame {i+1} complete"
 
 
 # ----------------------------

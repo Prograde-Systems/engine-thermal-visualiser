@@ -13,6 +13,8 @@ FPS = 20                # Frames per second
 DURATION = 10.0          # Total animation duration in seconds
 FRAME_RES = (1024, 768)  # Output resolution
 CMAP = "plasma"          # Color map for temperatures
+KERNAL = "linear"
+EPSILON = 0.5
 
 # ----------------------------
 # Folder selection
@@ -56,7 +58,7 @@ xt_points = np.array(xt_points)
 xt_values = np.array(xt_values)
 
 print("Creating 2D RBF interpolator for (x, t)...")
-rbf_xt = RBFInterpolator(xt_points, xt_values, kernel="linear")
+rbf_xt = RBFInterpolator(xt_points, xt_values, kernel=KERNAL)
 print("Interpolator ready.")
 
 # ----------------------------

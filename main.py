@@ -128,7 +128,6 @@ for i, t in enumerate(time_range):
         clim=[0, 1],
         show_edges=False,
     )
-    plotter.add_scalar_bar(title="Temperature (normalized)")
     plotter.reset_camera()
 
     img_path = os.path.join(frame_dir, f"frame_{i:03d}.png")

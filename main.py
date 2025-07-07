@@ -46,8 +46,8 @@ CMAP = cfg["colour_map"]
 # ----------------------------
 # Load data
 # ----------------------------
-thermo_pos = pd.read_csv(os.path.join(folder_path, "input/thermocouple_positions.csv"))
-temp_data = pd.read_csv(os.path.join(folder_path, "input/temperature_data.csv"))
+thermo_pos = pd.read_csv(os.path.join(folder_path, "input/TC_positions.csv"))
+temp_data = pd.read_csv(os.path.join(folder_path, "input/TC_temperatures.csv"))
 
 id_to_pos = {row["id"]: (row["x"], row["y"], row["z"]) for _, row in thermo_pos.iterrows()}
 

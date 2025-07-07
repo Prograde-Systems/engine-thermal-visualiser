@@ -66,6 +66,25 @@ for _, row in temp_data.iterrows():
 xt_points = np.array(xt_points)
 xt_values = np.array(xt_values)
 
+# Normalize xt_points for RBF stability
+x_mean = xt_points[:, 0].mean()
+x_std = xt_points[:, 0].std()
+t_mean = xt_points[:, 1].mean()
+t_std = xt_points[:, 1].std()
+
+# Save normalization constants for query normalization
+NORMALIZATION = {
+    "x_mean": x_mean,
+    "x_std": x_std,
+    "t_mean": t_mean,
+    "t_std": t_std
+}
+
+
+xt_points[:, 0] = (xt_points[:, 0] - x_mean) / x_std
+xt_points[:, 1] = (xt_points[:, 1] - t_mean) / t_std
+
+
 print("Creating 2D RBF interpolator for (x, t)...")
 rbf_xt = RBFInterpolator(xt_points, xt_values, kernel="multiquadric", epsilon=1.0, smoothing=1e-2)
 print("Interpolator ready.")
@@ -116,7 +135,10 @@ def render_single_frame(args):
 
     mesh_t = mesh.copy()
     x_coords = mesh_t.points[:, 0]
-    xt_query = np.column_stack((x_coords, np.full_like(x_coords, t)))
+    x_norm = (x_coords - NORMALIZATION["x_mean"]) / NORMALIZATION["x_std"]
+    t_norm = (t - NORMALIZATION["t_mean"]) / NORMALIZATION["t_std"]
+    xt_query = np.column_stack((x_norm, np.full_like(x_norm, t_norm)))
+
     temps = rbf_xt(xt_query)
 
     # Optional: per-frame clipping

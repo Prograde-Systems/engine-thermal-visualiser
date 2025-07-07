@@ -2,14 +2,14 @@ title: "ICARUS_EXAMPLE_05/07/25_1"
 
 FPS: 10
 playback_speed: 1 # Default 1.0 (no change); <1 = slow mo; >1 = fast mo
-t_start: 3.5
-t_end: 4
+t_start: 0
+t_end: 10
 
 camera:
   position: [125, -50, -100.0]
   focal_point: [125, 0, 0]
   up: [0,-1,0.0]
-
+  enable_parallel_projection: True
 
 frame_resolution: [1600, 1200]
 

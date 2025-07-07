@@ -157,6 +157,9 @@ def render_single_frame(args):
     plotter.camera.position = cfg["camera"]["position"]
     plotter.camera.focal_point = cfg["camera"]["focal_point"]
     plotter.camera.up = cfg["camera"]["up"]
+
+    if cfg["camera"]["enable_parallel_projection"]:
+        plotter.enable_parallel_projection()
     
     # Add mesh with temperature scalar bar
     plotter.add_mesh(

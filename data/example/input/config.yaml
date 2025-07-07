@@ -1,6 +1,6 @@
 title: "ICARUS_EXAMPLE_05/07/25_1"
 
-FPS: 10
+FPS: 30
 t_start: 0
 t_end: 10
 
@@ -9,4 +9,4 @@ frame_resolution: [1600, 1200]
 mesh_sampling: 1  # Default = 1.0 (no change); <1 = simplify; >1 = refine
 
 colour_map: "plasma"
-kernel: "linear"
+kernel: "cubic" # linear, thin_plate_spline, cubic, quintic

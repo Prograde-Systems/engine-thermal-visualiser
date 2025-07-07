@@ -132,6 +132,10 @@ def render_single_frame(args):
     plotter.set_background("black")
     plotter.view_isometric()
 
+    plotter.camera.position = cfg["camera"]["position"]
+    plotter.camera.focal_point = cfg["camera"]["focal_point"]
+    plotter.camera.up = cfg["camera"]["up"]
+    
     # Add mesh with temperature scalar bar
     plotter.add_mesh(
         mesh_t,

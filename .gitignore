@@ -46,3 +46,6 @@ dist/
 
 # Ignore test artifacts
 tests/output/
+
+# Ignore output files
+*output

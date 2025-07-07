@@ -35,9 +35,6 @@ Thumbs.db
 *.obj
 *.stl
 
-# Exported sensor data (optional – if generated)
-*.csv
-*.json
 
 # Build files
 build/

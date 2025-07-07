@@ -39,8 +39,10 @@ with open(os.path.join(folder_path, "input/config.yaml")) as stream:
 FPS = cfg['FPS']
 T_START = cfg["t_start"]
 T_END = cfg["t_end"]
+PLAYBACK_SPEED = cfg["playback_speed"]
 FRAME_RES = cfg["frame_resolution"]
 CMAP = cfg["colour_map"]
+
 
 
 # ----------------------------
@@ -202,7 +204,7 @@ print(f"✅ All frames saved to: {frame_dir}")
 video_path = os.path.join(folder_path, f"output/thermal_animation_{FPS}fps.mp4")
 ffmpeg_cmd = [
     "ffmpeg", "-y",
-    "-framerate", str(FPS),
+    "-framerate", str(FPS * PLAYBACK_SPEED),
     "-i", os.path.join(frame_dir, "frame_%03d.png"),
     "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "23",
     video_path

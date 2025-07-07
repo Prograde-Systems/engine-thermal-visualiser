@@ -67,7 +67,7 @@ xt_points = np.array(xt_points)
 xt_values = np.array(xt_values)
 
 print("Creating 2D RBF interpolator for (x, t)...")
-rbf_xt = RBFInterpolator(xt_points, xt_values, kernel=cfg["kernel"])
+rbf_xt = RBFInterpolator(xt_points, xt_values, kernel="multiquadric", epsilon=1.0, smoothing=1e-2)
 print("Interpolator ready.")
 
 # ----------------------------
@@ -94,7 +94,7 @@ elif sampling_factor < 1.0:
 else:
     print("Mesh sampling factor = 1.0 → using original resolution")
 
-mesh.scale([10, 10, 10], inplace=True)
+mesh.scale([1, 1, 1], inplace=True)
 print(f"Mesh loaded: {mesh.n_points} vertices")
 
 # ----------------------------

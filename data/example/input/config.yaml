@@ -2,8 +2,8 @@ title: "ICARUS_EXAMPLE_05/07/25_1"
 
 FPS: 10
 playback_speed: 1 # Default 1.0 (no change); <1 = slow mo; >1 = fast mo
-t_start: 0
-t_end: 10
+t_start: 3.5
+t_end: 4
 
 camera:
   position: [125, -50, -100.0]
@@ -13,7 +13,7 @@ camera:
 
 frame_resolution: [1600, 1200]
 
-mesh_sampling: 0.1  # Default = 1.0 (no change); <1 = simplify; >1 = refine
+mesh_sampling: 1  # Default = 1.0 (no change); <1 = simplify; >1 = refine
 
 colour_map: "plasma"
-kernel: "cubic" # linear, thin_plate_spline, cubic, quintic
+kernel: "thin_plate_spline" # linear, thin_plate_spline, cubic, quintic

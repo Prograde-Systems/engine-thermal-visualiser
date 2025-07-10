@@ -81,13 +81,52 @@ NORMALIZATION = {
 }
 
 
-xt_points[:, 0] = (xt_points[:, 0] - x_mean) / x_std
-xt_points[:, 1] = (xt_points[:, 1] - t_mean) / t_std
+from sklearn.utils import resample
+
+# --- Downsampling ---
+# --- Downsampling ---
+n_tcs = len([col for col in temp_data.columns if col != "t"])
+duration = T_END - T_START
+raw_point_count = xt_points.shape[0]
+
+# Estimate how many points we ideally want
+estimated_sample_size = int(FPS * duration * n_tcs)
+
+# Ensure we don't request more samples than we have
+sample_size = min(estimated_sample_size, raw_point_count)
+
+print(f"🎯 Estimated sample size = FPS × duration × TCs = {FPS} × {duration} × {n_tcs} = {estimated_sample_size}")
+print(f"🧮 Actual available points: {raw_point_count}")
+print(f"✅ Final sample size used: {sample_size}")
+
+# Downsample if needed
+if raw_point_count > sample_size:
+    from sklearn.utils import resample
+    xt_points_sampled, xt_values_sampled = resample(
+        xt_points, xt_values,
+        n_samples=sample_size,
+        random_state=42
+    )
+else:
+    xt_points_sampled = xt_points
+    xt_values_sampled = xt_values
 
 
+# --- Normalize ---
+xt_points_sampled[:, 0] = (xt_points_sampled[:, 0] - x_mean) / x_std
+xt_points_sampled[:, 1] = (xt_points_sampled[:, 1] - t_mean) / t_std
+
+# --- Create Interpolator ---
 print("Creating 2D RBF interpolator for (x, t)...")
-rbf_xt = RBFInterpolator(xt_points, xt_values, kernel="multiquadric", epsilon=1.0, smoothing=1e-2)
+rbf_xt = RBFInterpolator(
+    xt_points_sampled, 
+    xt_values_sampled, 
+    kernel="multiquadric", 
+    epsilon=1.0, 
+    smoothing=1e-2
+)
 print("Interpolator ready.")
+
 
 # ----------------------------
 # Load mesh
@@ -122,8 +161,12 @@ print(f"Mesh loaded: {mesh.n_points} vertices")
 frame_dir = os.path.join(folder_path, "output/frames_temp")
 os.makedirs(frame_dir, exist_ok=True)
 
-global_min = int(xt_values.min())
-global_max = int(xt_values.max())
+# Filter rows in temp_data within [T_START, T_END]
+temp_data_filtered = temp_data[(temp_data["t"] >= T_START) & (temp_data["t"] <= T_END)]
+
+# Get the actual min/max temperature across all sensors in that range
+global_min = int(temp_data_filtered.iloc[:, 1:].min().min())
+global_max = int(temp_data_filtered.iloc[:, 1:].max().max())
 time_range = np.linspace(T_START, T_END, int((T_END - T_START) * FPS))
 
 # ----------------------------

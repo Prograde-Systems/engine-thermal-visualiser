@@ -58,17 +58,34 @@ x_std = x_all.std()
 NORMALIZATION = {"x_mean": x_mean, "x_std": x_std}
 
 # Create spatial interpolators per time step
-print("\nCreating spatial (x-only) interpolators per time step...")
+# Create spatial interpolators only for required frame times
+print("\nCreating spatial (x-only) interpolators for required frames only...")
 interpolators_by_time = {}
 
-for _, row in temp_data.iterrows():
-    t = row["t"]
+# Times needed for rendering
+time_range = np.linspace(T_START, T_END, int((T_END - T_START) * FPS))
+
+# Available timestamps in the data
+available_times = temp_data["t"].values
+
+# Find the nearest available time in the dataset for each frame time
+nearest_times = np.unique([
+    available_times[np.abs(available_times - t).argmin()]
+    for t in time_range
+])
+
+for t in nearest_times:
+    row = temp_data[temp_data["t"] == t]
+    if row.empty:
+        continue
+    row = row.iloc[0]
+
     valid_ids = [col for col in row.index[1:] if pd.notna(row[col]) and col in id_to_pos]
     x_vals = np.array([id_to_pos[col][0] for col in valid_ids])
     temps = np.array([row[col] for col in valid_ids])
 
     if len(x_vals) < 2:
-        continue  # Skip if not enough points to interpolate
+        continue  # Skip underconstrained interpolation
 
     sort_idx = np.argsort(x_vals)
     x_vals_sorted = x_vals[sort_idx]
@@ -82,7 +99,8 @@ for _, row in temp_data.iterrows():
         fill_value="extrapolate"
     )
 
-print(f"✅ {len(interpolators_by_time)} interpolators ready.")
+print(f"{len(interpolators_by_time)} interpolators created for {len(time_range)} frames.")
+
 
 # ----------------------------
 # Load mesh
@@ -123,7 +141,8 @@ time_range = np.linspace(T_START, T_END, int((T_END - T_START) * FPS))
 def render_single_frame(args):
     i, t = args
     start_time = time.perf_counter()
-    print(f"🎬 Rendering frame {i+1}/{len(time_range)} at t = {t:.2f}s", flush=True)
+    # DEBUG - Print
+    #print(f"Rendering frame {i+1}/{len(time_range)} at t = {t:.2f}s", flush=True)
 
     mesh_t = mesh.copy()
     x_coords = mesh_t.points[:, 0]
@@ -179,19 +198,18 @@ def render_single_frame(args):
     plotter.close()
 
     elapsed = time.perf_counter() - start_time
-    return f"✅ Frame {i+1}/{len(time_range)} (t={t:.2f}s) completed in {elapsed:.2f}s"
-
+    return None
 # ----------------------------
 # Parallel rendering
 # ----------------------------
 args_list = list(enumerate(time_range))
-print(f"\n🚀 Starting parallel rendering with {os.cpu_count()} workers for {len(args_list)} frames...\n")
+print(f"\n Starting parallel rendering with {os.cpu_count()} workers for {len(args_list)} frames...\n")
 
 with Pool() as pool:
     for result in tqdm(pool.imap_unordered(render_single_frame, args_list), total=len(args_list)):
-        print(result, flush=True)
+        ...
 
-print(f"✅ Rendering complete — {len(args_list)} frames saved to: {frame_dir}")
+print(f" Rendering complete — {len(args_list)} frames saved to: {frame_dir}")
 
 # ----------------------------
 # Compile video
@@ -205,34 +223,50 @@ ffmpeg_cmd = [
     video_path
 ]
 
-print(f"\n🎞️ Compiling video at {FPS} FPS...")
+print(f"\n Compiling video at {FPS} FPS...")
 try:
     subprocess.run(ffmpeg_cmd, check=True)
-    print(f"✅ Video saved to: {video_path}")
+    print(f" Video saved to: {video_path}")
 except FileNotFoundError:
-    print("❌ ffmpeg not found. Please install it.")
+    print(" ffmpeg not found. Please install it.")
 except subprocess.CalledProcessError:
-    print("❌ ffmpeg failed.")
+    print(" ffmpeg failed.")
 
 
-    # ----------------------------
-# Compile GIF
+# ----------------------------
+# GIF Compilation
 # ----------------------------
 gif_path = os.path.join(folder_path, f"output/thermal_animation_{FPS}fps.gif")
+palette_path = os.path.join(folder_path, "output/palette.png")
+input_pattern = os.path.join(frame_dir, "frame_%03d.png")
+width, height = cfg["frame_resolution"]
+
+# First pass: generate color palette
+ffmpeg_palette_cmd = [
+    "ffmpeg", "-y",
+    "-framerate", str(FPS * PLAYBACK_SPEED),
+    "-i", input_pattern,
+    "-vf", f"fps={FPS * PLAYBACK_SPEED},scale={width}:{height}:flags=lanczos,palettegen",
+    palette_path
+]
+
+# Second pass: apply palette to render final GIF
 ffmpeg_gif_cmd = [
     "ffmpeg", "-y",
     "-framerate", str(FPS * PLAYBACK_SPEED),
-    "-i", os.path.join(frame_dir, "frame_%03d.png"),
-    "-vf", "scale=iw:-1:flags=lanczos",  # optional: maintain aspect ratio with high-quality scaling
+    "-i", input_pattern,
+    "-i", palette_path,
+    "-filter_complex", f"fps={FPS * PLAYBACK_SPEED},scale={width}:{height}:flags=lanczos[x];[x][1:v]paletteuse",
     "-loop", "0",
     gif_path
 ]
 
-print(f"\n🖼️ Compiling GIF at {FPS} FPS...")
+print(f"\n Compiling optimized GIF at {FPS} FPS and resolution {width}x{height}...")
 try:
+    subprocess.run(ffmpeg_palette_cmd, check=True)
     subprocess.run(ffmpeg_gif_cmd, check=True)
-    print(f"✅ GIF saved to: {gif_path}")
+    print(f"GIF saved to: {gif_path}")
 except FileNotFoundError:
-    print("❌ ffmpeg not found. Please install it.")
+    print("ffmpeg not found. Please install it.")
 except subprocess.CalledProcessError:
-    print("❌ ffmpeg failed during GIF creation.")
+    print("ffmpeg failed during GIF creation.")

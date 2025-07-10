@@ -1,20 +1,23 @@
+# General metadata
 title: "GUR_ICARUS_10/07/25_2"
 
-FPS: 15
-playback_speed: 1 # Default 1.0 (no change); <1 = slow mo; >1 = fast mo
+# Time & playback control
 t_start: 0
 t_end: 10
+FPS: 15
+playback_speed: 1  # 1.0 = real-time; <1 = slow motion; >1 = fast forward
 
+# Output and visual settings
+frame_resolution: [1200, 900]
+colour_map: "inferno"
+interpolation_method: "cubic"  # Options: linear, nearest, zero, slinear, quadratic, cubic
+
+# Geometry processing
+mesh_sampling: 1  # 1.0 = no change; <1 = simplify; >1 = refine
+
+# Camera configuration
 camera:
   position: [125, -50, -100.0]
   focal_point: [125, 0, 0]
-  up: [0,-1,0.0]
-  enable_parallel_projection: True
-
-frame_resolution: [1200, 900]
-
-mesh_sampling: 1  # Default = 1.0 (no change); <1 = simplify; >1 = refine
-
-colour_map: "inferno"
-interpolation_method: "cubic"  # Options: linear, nearest, zero, slinear, quadratic, cubic # Reccomended:cubic
-
+  up: [0, -1, 0.0]
+  enable_parallel_projection: true

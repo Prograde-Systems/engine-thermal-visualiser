@@ -6,6 +6,8 @@ import pyvista as pv
 import subprocess
 from multiprocessing import Pool
 import yaml
+from tqdm import tqdm
+import time
 
 # ----------------------------
 # Folder selection
@@ -26,15 +28,13 @@ folder_path = os.path.join(base_input_dir, folders[selection])
 # ----------------------------
 # Configuration
 # ----------------------------
-
-
 with open(os.path.join(folder_path, "input/config.yaml")) as stream:
     try:
         cfg = yaml.safe_load(stream)
-        print(cfg)  # Optional: just for debugging
+        print(cfg)
     except yaml.YAMLError as exc:
         print(exc)
-        cfg = {}  # Optional: fallback if error occurs
+        cfg = {}
 
 FPS = cfg['FPS']
 T_START = cfg["t_start"]
@@ -42,8 +42,6 @@ T_END = cfg["t_end"]
 PLAYBACK_SPEED = cfg["playback_speed"]
 FRAME_RES = cfg["frame_resolution"]
 CMAP = cfg["colour_map"]
-
-
 
 # ----------------------------
 # Load data
@@ -72,7 +70,6 @@ x_std = xt_points[:, 0].std()
 t_mean = xt_points[:, 1].mean()
 t_std = xt_points[:, 1].std()
 
-# Save normalization constants for query normalization
 NORMALIZATION = {
     "x_mean": x_mean,
     "x_std": x_std,
@@ -80,26 +77,18 @@ NORMALIZATION = {
     "t_std": t_std
 }
 
-
-from sklearn.utils import resample
-
-# --- Downsampling ---
 # --- Downsampling ---
 n_tcs = len([col for col in temp_data.columns if col != "t"])
 duration = T_END - T_START
 raw_point_count = xt_points.shape[0]
 
-# Estimate how many points we ideally want
 estimated_sample_size = int(FPS * duration * n_tcs)
-
-# Ensure we don't request more samples than we have
 sample_size = min(estimated_sample_size, raw_point_count)
 
-print(f"🎯 Estimated sample size = FPS × duration × TCs = {FPS} × {duration} × {n_tcs} = {estimated_sample_size}")
+print(f"\n🎯 Estimated sample size = FPS × duration × TCs = {FPS} × {duration} × {n_tcs} = {estimated_sample_size}")
 print(f"🧮 Actual available points: {raw_point_count}")
 print(f"✅ Final sample size used: {sample_size}")
 
-# Downsample if needed
 if raw_point_count > sample_size:
     from sklearn.utils import resample
     xt_points_sampled, xt_values_sampled = resample(
@@ -111,22 +100,20 @@ else:
     xt_points_sampled = xt_points
     xt_values_sampled = xt_values
 
-
 # --- Normalize ---
 xt_points_sampled[:, 0] = (xt_points_sampled[:, 0] - x_mean) / x_std
 xt_points_sampled[:, 1] = (xt_points_sampled[:, 1] - t_mean) / t_std
 
 # --- Create Interpolator ---
-print("Creating 2D RBF interpolator for (x, t)...")
+print("\nCreating 2D RBF interpolator for (x, t)...")
 rbf_xt = RBFInterpolator(
-    xt_points_sampled, 
-    xt_values_sampled, 
-    kernel="multiquadric", 
-    epsilon=1.0, 
+    xt_points_sampled,
+    xt_values_sampled,
+    kernel="multiquadric",
+    epsilon=1.0,
     smoothing=1e-2
 )
-print("Interpolator ready.")
-
+print("✅ Interpolator ready.")
 
 # ----------------------------
 # Load mesh
@@ -137,18 +124,13 @@ mesh = pv.read(mesh_path)
 sampling_factor = cfg.get("mesh_sampling", 1.0)
 
 if sampling_factor > 1.0:
-    # 🔼 Refine: subdivide mesh
     subdivisions = int(np.floor(np.log2(sampling_factor)))
     mesh = mesh.subdivide(subdivisions, 'loop')
-
     print(f"Mesh refined with {subdivisions} subdivisions → {mesh.n_points} vertices")
-
 elif sampling_factor < 1.0:
-    # 🔽 Simplify: reduce number of faces
-    target_reduction = 1.0 - sampling_factor  # e.g., 0.5 means 50% fewer faces
+    target_reduction = 1.0 - sampling_factor
     mesh = mesh.decimate(target_reduction=target_reduction)
     print(f"Mesh simplified by {int(target_reduction * 100)}% → {mesh.n_points} vertices")
-
 else:
     print("Mesh sampling factor = 1.0 → using original resolution")
 
@@ -161,10 +143,7 @@ print(f"Mesh loaded: {mesh.n_points} vertices")
 frame_dir = os.path.join(folder_path, "output/frames_temp")
 os.makedirs(frame_dir, exist_ok=True)
 
-# Filter rows in temp_data within [T_START, T_END]
 temp_data_filtered = temp_data[(temp_data["t"] >= T_START) & (temp_data["t"] <= T_END)]
-
-# Get the actual min/max temperature across all sensors in that range
 global_min = int(temp_data_filtered.iloc[:, 1:].min().min())
 global_max = int(temp_data_filtered.iloc[:, 1:].max().max())
 time_range = np.linspace(T_START, T_END, int((T_END - T_START) * FPS))
@@ -174,7 +153,8 @@ time_range = np.linspace(T_START, T_END, int((T_END - T_START) * FPS))
 # ----------------------------
 def render_single_frame(args):
     i, t = args
-    print(f"🎬 [Worker] Rendering frame {i+1}/{len(time_range)} at t = {t:.2f}s")
+    start_time = time.perf_counter()
+    print(f"🎬 Rendering frame {i+1}/{len(time_range)} at t = {t:.2f}s", flush=True)
 
     mesh_t = mesh.copy()
     x_coords = mesh_t.points[:, 0]
@@ -184,15 +164,12 @@ def render_single_frame(args):
 
     temps = rbf_xt(xt_query)
 
-    # Optional: per-frame clipping
     frame_min = np.interp(t, temp_data["t"], temp_data.iloc[:, 1:].min(axis=1))
     frame_max = np.interp(t, temp_data["t"], temp_data.iloc[:, 1:].max(axis=1))
     temps_clipped = np.clip(temps, frame_min, frame_max)
 
-    # Assign raw physical temperature data to mesh
     mesh_t.point_data["Temperature"] = temps_clipped
 
-    # Set up plotter
     plotter = pv.Plotter(off_screen=True, window_size=FRAME_RES)
     plotter.set_background("black")
     plotter.view_isometric()
@@ -203,72 +180,59 @@ def render_single_frame(args):
 
     if cfg["camera"]["enable_parallel_projection"]:
         plotter.enable_parallel_projection()
-    
-    # Add mesh with temperature scalar bar
+
     plotter.add_mesh(
         mesh_t,
         scalars="Temperature",
         cmap=CMAP,
-        clim=[global_min, global_max],  # Global scale for consistency
+        clim=[global_min, global_max],
         show_edges=False,
         scalar_bar_args={
-            "title": "",              # No title
-            "color": "white",         # White tick labels
-            "vertical": False,        # Horizontal bar
-            "title_font_size": 1,     # Hide title spacing
+            "title": "",
+            "color": "white",
+            "vertical": False,
+            "title_font_size": 1,
             "label_font_size": 25,
-            "position_x": 0.3,        # Adjust as needed
+            "position_x": 0.3,
             "position_y": 0.05,
             "width": 0.4,
             "height": 0.04
         }
     )
 
-    plotter.add_text(
-        text="Temperature (K)",
-        color= "white",
-        position="lower_edge",
-        font_size=15
-    )
+    # TODO - testing
+    #test_position = [300, 0, 0]  # Change this to test different spots
+    #marker = pv.Sphere(radius=2.0, center=test_position)
+    #plotter.add_mesh(marker, color="lime", opacity=0.9, name="marker")
+    
 
+
+    plotter.add_text("Temperature (°C)", color="white", position="lower_edge", font_size=15)
+    plotter.add_text(cfg["title"], position="upper_left", font_size=15, color="white")
+    plotter.add_text(f"t = {t:.2f} s", position="lower_right", font_size=15, color="white")
 
     plotter.reset_camera()
 
-    # Add main title (top-left or top-center)
-    plotter.add_text(
-        text=cfg["title"],
-        position="upper_left",  # or "upper_center"
-        font_size=15,
-        color="white"
-    )
-
-    # Add time annotation (bottom-right)
-    plotter.add_text(
-        text=f"t = {t:.2f} s",
-        position="lower_right",
-        font_size=15,
-        color="white"
-    )
-
-    # Render and save frame
     img_path = os.path.join(frame_dir, f"frame_{i:03d}.png")
     plotter.screenshot(img_path)
     plotter.close()
 
-    return f"[INFO]Frame {i+1} complete"
+    elapsed = time.perf_counter() - start_time
 
+
+    return f"✅ Frame {i+1}/{len(time_range)} (t={t:.2f}s) completed in {elapsed:.2f}s"
 
 # ----------------------------
 # Parallel rendering
 # ----------------------------
 args_list = list(enumerate(time_range))
-print(f"\n🚀 Starting parallel rendering with {os.cpu_count()} workers...\n")
+print(f"\n🚀 Starting parallel rendering with {os.cpu_count()} workers for {len(args_list)} frames...\n")
 
 with Pool() as pool:
-    for result in pool.imap_unordered(render_single_frame, args_list):
-        print(result)
+    for result in tqdm(pool.imap_unordered(render_single_frame, args_list), total=len(args_list)):
+        print(result, flush=True)
 
-print(f"✅ All frames saved to: {frame_dir}")
+print(f"✅ Rendering complete — {len(args_list)} frames saved to: {frame_dir}")
 
 # ----------------------------
 # Compile video

@@ -1,0 +1,20 @@
+title: "GUR_ICARUS_10/07/25_2"
+
+FPS: 15
+playback_speed: 1 # Default 1.0 (no change); <1 = slow mo; >1 = fast mo
+t_start: 0
+t_end: 10
+
+camera:
+  position: [125, -50, -100.0]
+  focal_point: [125, 0, 0]
+  up: [0,-1,0.0]
+  enable_parallel_projection: True
+
+frame_resolution: [1200, 900]
+
+mesh_sampling: 1  # Default = 1.0 (no change); <1 = simplify; >1 = refine
+
+colour_map: "inferno"
+interpolation_method: "cubic"  # Options: linear, nearest, zero, slinear, quadratic, cubic # Reccomended:cubic
+

@@ -2,6 +2,12 @@
 
 A Python-based visualisation tool for animating spatially interpolated temperature data on 3D engine geometries. Developed for design evaluation.
 
+<p align="center">
+  <img src="assets/demo_15fps.gif" width="800" />
+</p>
+
+
+
 ---
 
 ## Overview

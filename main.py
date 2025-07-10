@@ -213,3 +213,26 @@ except FileNotFoundError:
     print("❌ ffmpeg not found. Please install it.")
 except subprocess.CalledProcessError:
     print("❌ ffmpeg failed.")
+
+
+    # ----------------------------
+# Compile GIF
+# ----------------------------
+gif_path = os.path.join(folder_path, f"output/thermal_animation_{FPS}fps.gif")
+ffmpeg_gif_cmd = [
+    "ffmpeg", "-y",
+    "-framerate", str(FPS * PLAYBACK_SPEED),
+    "-i", os.path.join(frame_dir, "frame_%03d.png"),
+    "-vf", "scale=iw:-1:flags=lanczos",  # optional: maintain aspect ratio with high-quality scaling
+    "-loop", "0",
+    gif_path
+]
+
+print(f"\n🖼️ Compiling GIF at {FPS} FPS...")
+try:
+    subprocess.run(ffmpeg_gif_cmd, check=True)
+    print(f"✅ GIF saved to: {gif_path}")
+except FileNotFoundError:
+    print("❌ ffmpeg not found. Please install it.")
+except subprocess.CalledProcessError:
+    print("❌ ffmpeg failed during GIF creation.")

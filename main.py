@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 import numpy as np
-from scipy.interpolate import RBFInterpolator
+from scipy.interpolate import interp1d
 import pyvista as pv
 import subprocess
 from multiprocessing import Pool
@@ -51,69 +51,38 @@ temp_data = pd.read_csv(os.path.join(folder_path, "input/TC_temperatures.csv"))
 
 id_to_pos = {row["id"]: (row["x"], row["y"], row["z"]) for _, row in thermo_pos.iterrows()}
 
-xt_points = []
-xt_values = []
+# Normalize x for interpolator stability
+x_all = thermo_pos["x"].values
+x_mean = x_all.mean()
+x_std = x_all.std()
+NORMALIZATION = {"x_mean": x_mean, "x_std": x_std}
+
+# Create spatial interpolators per time step
+print("\nCreating spatial (x-only) interpolators per time step...")
+interpolators_by_time = {}
+
 for _, row in temp_data.iterrows():
     t = row["t"]
-    for col in row.index[1:]:
-        if pd.notna(row[col]) and col in id_to_pos:
-            x = id_to_pos[col][0]
-            xt_points.append([x, t])
-            xt_values.append(row[col])
+    valid_ids = [col for col in row.index[1:] if pd.notna(row[col]) and col in id_to_pos]
+    x_vals = np.array([id_to_pos[col][0] for col in valid_ids])
+    temps = np.array([row[col] for col in valid_ids])
 
-xt_points = np.array(xt_points)
-xt_values = np.array(xt_values)
+    if len(x_vals) < 2:
+        continue  # Skip if not enough points to interpolate
 
-# Normalize xt_points for RBF stability
-x_mean = xt_points[:, 0].mean()
-x_std = xt_points[:, 0].std()
-t_mean = xt_points[:, 1].mean()
-t_std = xt_points[:, 1].std()
+    sort_idx = np.argsort(x_vals)
+    x_vals_sorted = x_vals[sort_idx]
+    temps_sorted = temps[sort_idx]
 
-NORMALIZATION = {
-    "x_mean": x_mean,
-    "x_std": x_std,
-    "t_mean": t_mean,
-    "t_std": t_std
-}
-
-# --- Downsampling ---
-n_tcs = len([col for col in temp_data.columns if col != "t"])
-duration = T_END - T_START
-raw_point_count = xt_points.shape[0]
-
-estimated_sample_size = int(FPS * duration * n_tcs)
-sample_size = min(estimated_sample_size, raw_point_count)
-
-print(f"\n🎯 Estimated sample size = FPS × duration × TCs = {FPS} × {duration} × {n_tcs} = {estimated_sample_size}")
-print(f"🧮 Actual available points: {raw_point_count}")
-print(f"✅ Final sample size used: {sample_size}")
-
-if raw_point_count > sample_size:
-    from sklearn.utils import resample
-    xt_points_sampled, xt_values_sampled = resample(
-        xt_points, xt_values,
-        n_samples=sample_size,
-        random_state=42
+    interpolators_by_time[t] = interp1d(
+        x_vals_sorted,
+        temps_sorted,
+        kind=cfg['interpolation_method'],
+        bounds_error=False,
+        fill_value="extrapolate"
     )
-else:
-    xt_points_sampled = xt_points
-    xt_values_sampled = xt_values
 
-# --- Normalize ---
-xt_points_sampled[:, 0] = (xt_points_sampled[:, 0] - x_mean) / x_std
-xt_points_sampled[:, 1] = (xt_points_sampled[:, 1] - t_mean) / t_std
-
-# --- Create Interpolator ---
-print("\nCreating 2D RBF interpolator for (x, t)...")
-rbf_xt = RBFInterpolator(
-    xt_points_sampled,
-    xt_values_sampled,
-    kernel="multiquadric",
-    epsilon=1.0,
-    smoothing=1e-2
-)
-print("✅ Interpolator ready.")
+print(f"✅ {len(interpolators_by_time)} interpolators ready.")
 
 # ----------------------------
 # Load mesh
@@ -158,11 +127,11 @@ def render_single_frame(args):
 
     mesh_t = mesh.copy()
     x_coords = mesh_t.points[:, 0]
-    x_norm = (x_coords - NORMALIZATION["x_mean"]) / NORMALIZATION["x_std"]
-    t_norm = (t - NORMALIZATION["t_mean"]) / NORMALIZATION["t_std"]
-    xt_query = np.column_stack((x_norm, np.full_like(x_norm, t_norm)))
 
-    temps = rbf_xt(xt_query)
+    # Find nearest timestamp
+    nearest_t = min(interpolators_by_time.keys(), key=lambda ti: abs(ti - t))
+    interp = interpolators_by_time[nearest_t]
+    temps = interp(x_coords)
 
     frame_min = np.interp(t, temp_data["t"], temp_data.iloc[:, 1:].min(axis=1))
     frame_max = np.interp(t, temp_data["t"], temp_data.iloc[:, 1:].max(axis=1))
@@ -200,26 +169,16 @@ def render_single_frame(args):
         }
     )
 
-    # TODO - testing
-    #test_position = [300, 0, 0]  # Change this to test different spots
-    #marker = pv.Sphere(radius=2.0, center=test_position)
-    #plotter.add_mesh(marker, color="lime", opacity=0.9, name="marker")
-    
-
-
     plotter.add_text("Temperature (°C)", color="white", position="lower_edge", font_size=15)
     plotter.add_text(cfg["title"], position="upper_left", font_size=15, color="white")
     plotter.add_text(f"t = {t:.2f} s", position="lower_right", font_size=15, color="white")
 
     plotter.reset_camera()
-
     img_path = os.path.join(frame_dir, f"frame_{i:03d}.png")
     plotter.screenshot(img_path)
     plotter.close()
 
     elapsed = time.perf_counter() - start_time
-
-
     return f"✅ Frame {i+1}/{len(time_range)} (t={t:.2f}s) completed in {elapsed:.2f}s"
 
 # ----------------------------

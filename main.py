@@ -121,7 +121,21 @@ elif sampling_factor < 1.0:
 else:
     print("Mesh sampling factor = 1.0 → using original resolution")
 
+
+rotation_cfg = cfg.get("rotation_rpy", {})
+ROLL = rotation_cfg.get("roll", 0)
+PITCH = rotation_cfg.get("pitch", 0)
+YAW = rotation_cfg.get("yaw", 0)
+
 mesh.scale([1, 1, 1], inplace=True)
+
+# Apply RPY rotation if specified
+if any([ROLL, PITCH, YAW]):
+    print(f"Rotating mesh: roll={ROLL}°, pitch={PITCH}°, yaw={YAW}°")
+    mesh.rotate_x(ROLL, inplace=True)
+    mesh.rotate_y(PITCH, inplace=True)
+    mesh.rotate_z(YAW, inplace=True)
+
 print(f"Mesh loaded: {mesh.n_points} vertices")
 
 # ----------------------------
@@ -168,6 +182,9 @@ def render_single_frame(args):
 
     if cfg["camera"]["enable_parallel_projection"]:
         plotter.enable_parallel_projection()
+
+
+
 
     plotter.add_mesh(
         mesh_t,
@@ -244,6 +261,7 @@ width, height = cfg["frame_resolution"]
 # First pass: generate color palette
 ffmpeg_palette_cmd = [
     "ffmpeg", "-y",
+    "-loglevel", "error",
     "-framerate", str(FPS * PLAYBACK_SPEED),
     "-i", input_pattern,
     "-vf", f"fps={FPS * PLAYBACK_SPEED},scale={width}:{height}:flags=lanczos,palettegen",
@@ -253,6 +271,7 @@ ffmpeg_palette_cmd = [
 # Second pass: apply palette to render final GIF
 ffmpeg_gif_cmd = [
     "ffmpeg", "-y",
+    "-loglevel", "error",
     "-framerate", str(FPS * PLAYBACK_SPEED),
     "-i", input_pattern,
     "-i", palette_path,

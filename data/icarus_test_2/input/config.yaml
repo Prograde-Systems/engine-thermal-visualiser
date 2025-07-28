@@ -4,7 +4,7 @@ title: "GUR_ICARUS_10/07/25_2"
 # Time & playback control
 t_start: 0
 t_end: 10
-FPS: 15
+FPS: 1
 playback_speed: 1  # 1.0 = real-time; <1 = slow motion; >1 = fast forward
 
 # Output and visual settings
@@ -14,6 +14,11 @@ interpolation_method: "cubic"  # Options: linear, nearest, zero, slinear, quadra
 
 # Geometry processing
 mesh_sampling: 1  # 1.0 = no change; <1 = simplify; >1 = refine
+
+rotation_rpy:
+  roll: 0.0
+  pitch: 90.0
+  yaw: 0.0
 
 # Camera configuration
 camera:
